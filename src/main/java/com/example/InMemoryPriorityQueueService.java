@@ -15,15 +15,15 @@ public class InMemoryPriorityQueueService implements QueueService{
     InMemoryPriorityQueueService() {
         this.queues = new ConcurrentHashMap<>();
         String propFileName = "config.properties";
-        Properties confInfo = new Properties();
+        Properties properties = new Properties();
 
         try (InputStream inStream = getClass().getClassLoader().getResourceAsStream(propFileName)) {
-            confInfo.load(inStream);
+            properties.load(inStream);
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        this.visibilityTimeout = Integer.parseInt(confInfo
+        this.visibilityTimeout = Integer.parseInt(properties
                 .getProperty("visibilityTimeout", "30"));
     }
 

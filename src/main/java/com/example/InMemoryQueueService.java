@@ -45,7 +45,7 @@ public class InMemoryQueueService implements QueueService {
 
     long nowTime = now();
     Optional<Message> msgOpt = queue.stream().filter(m -> m.isVisibleAt(nowTime)).findFirst();
-    if (msgOpt.isEmpty()) {
+    if (!msgOpt.isPresent()) {
       return null;
     } else {
       Message msg = msgOpt.get();
