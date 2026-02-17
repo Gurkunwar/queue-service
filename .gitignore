@@ -5,3 +5,4 @@ nigel*
 target/
 .DS_Store
 .idea
+resources/config.properties
