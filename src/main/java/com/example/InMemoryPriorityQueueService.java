@@ -29,24 +29,16 @@ public class InMemoryPriorityQueueService implements QueueService{
 
     @Override
     public void push(String queueUrl, String messageBody) {
-        PriorityQueue<QueueMetaData> queue = queues.get(queueUrl);
-        if (queue == null) {
-            queue = new PriorityQueue<>();
-            queues.put(queueUrl, queue);
+        PriorityQueue<QueueMetaData> queue = queues.computeIfAbsent(queueUrl, k -> new PriorityQueue<>());
+
+        int priority = parsePriority(messageBody);
+        String finalBody = cleanBody(messageBody);
+
+        QueueMetaData metaData = new QueueMetaData(new Message(finalBody), priority, seqTracker.getAndIncrement());
+
+        synchronized (queue) {
+            queue.add(metaData);
         }
-
-        int priority = 5;
-        String finalBody = messageBody;
-
-        if (messageBody != null && messageBody.matches("^P\\d+:.*")) {
-            int colonIndex = messageBody.indexOf(":");
-            priority = Integer.parseInt(messageBody.substring(1, colonIndex));
-            finalBody = messageBody.substring(colonIndex + 1);
-        }
-
-        Message msg = new Message(finalBody);
-        QueueMetaData metaData = new QueueMetaData(msg, priority, seqTracker.getAndIncrement());
-        queue.add(metaData);
     }
 
     @Override
@@ -57,20 +49,32 @@ public class InMemoryPriorityQueueService implements QueueService{
         }
 
         synchronized (queue) {
+            if (queue.isEmpty()) return null;
+
             long now = System.currentTimeMillis();
+            List<QueueMetaData> skipped = new ArrayList<>();
+            QueueMetaData selected = null;
 
-            QueueMetaData[] items = queue.toArray(new QueueMetaData[0]);
-            Arrays.sort(items);
-
-            for(QueueMetaData meta : items) {
-                Message msg = meta.message;
-                if (msg.isVisibleAt(now)) {
-                    msg.setReceiptId(UUID.randomUUID().toString());
-                    msg.incrementAttempts();
-                    msg.setVisibleFrom(now + TimeUnit.SECONDS.toMillis(visibilityTimeout));
-
-                    return new Message(msg.getBody(), msg.getReceiptId());
+            while (!queue.isEmpty()) {
+                QueueMetaData meta = queue.poll();
+                if (meta.message.isVisibleAt(now)) {
+                    selected = meta;
+                    break;
+                } else {
+                    skipped.add(meta);
                 }
+            }
+
+            queue.addAll(skipped);
+
+            if (selected != null) {
+                Message msg = selected.message;
+                msg.setReceiptId(UUID.randomUUID().toString());
+                msg.incrementAttempts();
+                msg.setVisibleFrom(now + TimeUnit.SECONDS.toMillis(visibilityTimeout));
+
+                queue.add(selected);
+                return msg;
             }
         }
 
@@ -85,6 +89,20 @@ public class InMemoryPriorityQueueService implements QueueService{
         synchronized (queue) {
             queue.removeIf(meta -> receiptId.equals(meta.message.getReceiptId()));
         }
+    }
+
+    private int parsePriority(String body) {
+        if (body != null && body.matches("^P\\d+:.*")) {
+            return Integer.parseInt(body.substring(1, body.indexOf(":")));
+        }
+        return 5;
+    }
+
+    private String cleanBody(String body) {
+        if (body != null && body.matches("^P\\d+:.*")) {
+            return body.substring(body.indexOf(":") + 1);
+        }
+        return body;
     }
 
     private static class QueueMetaData implements Comparable<QueueMetaData> {

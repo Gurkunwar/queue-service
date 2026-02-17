@@ -56,7 +56,10 @@ public class UpstashQueueService implements QueueService {
     }
 
     @Override
-    public void delete(String queueUrl, String receiptId) {}
+    public void delete(String queueUrl, String receiptId) {
+        throw new UnsupportedOperationException(
+                "Upstash Redis LPOP model does not support manual receipt deletion.");
+    }
 
     protected String executeCommand(String jsonBody) {
         try {
@@ -70,7 +73,8 @@ public class UpstashQueueService implements QueueService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                throw new RuntimeException("Upstash error: HTTP " + response.statusCode() + " - " + response.body());
+                throw new RuntimeException("Upstash error: HTTP " +
+                        response.statusCode() + " - " + response.body());
             }
 
             return response.body();
